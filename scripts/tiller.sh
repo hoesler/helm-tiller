@@ -152,6 +152,7 @@ tiller_env() {
 start_tiller() {
   tiller_env
   { ./bin/tiller --storage=${HELM_TILLER_STORAGE} --listen=127.0.0.1:${HELM_TILLER_PORT} --history-max=${HELM_TILLER_HISTORY_MAX} & } 2>"${HELM_TILLER_LOGS_DIR}"
+  export TILLER_PID=$!
   if [[ "${HELM_TILLER_SILENT}" == "false" ]]; then
     echo "Tiller namespace: $TILLER_NAMESPACE"
     echo "Tiller port: $HELM_TILLER_PORT"
@@ -165,9 +166,9 @@ run_tiller() {
 
 stop_tiller() {
   if [[ "${HELM_TILLER_SILENT}" == "false" ]]; then
-    echo "Stopping Tiller..."
+    echo "Stopping Tiller with PID ${TILLER_PID:?"Env var TILLER_PID not defined"}..."
   fi
-  pkill -f ./bin/tiller
+  kill "$TILLER_PID"
 }
 
 COMMAND=$1
