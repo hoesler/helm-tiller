@@ -1,9 +1,43 @@
 #!/usr/bin/env bash
 
 set -o errexit
+find_unused_port() {
+
+  if [[ "$OSTYPE" == "linux-gnu" ]]; then
+    read -r lower_port upper_port < /proc/sys/net/ipv4/ip_local_port_range
+    is_port_free() {
+      port=$1
+      netstat -tulpn | grep LISTEN | grep -q ":$port" && return 1
+      return 0
+    }
+  elif [[ "$OSTYPE" == "darwin"* ]]; then
+    lower_port=$(sysctl -n net.inet.ip.portrange.first)
+    upper_port=$(sysctl -n net.inet.ip.portrange.last)
+    is_port_free() {
+      port=$1
+      netstat -anp tcp | grep LISTEN | grep -q "\\.$port\\s*" && return 1
+      netstat -anp udp | grep LISTEN | grep -q "\\.$port\\s*" && return 1
+      return 0
+    }
+  else
+    echo "Unsupported OS type" && exit 1
+  fi
+
+  for (( port = lower_port ; port <= upper_port ; port++ )); do
+    if is_port_free "$port"; then
+      echo "$port"
+      return 0
+    fi
+  done
+
+  echo "Found no unused port" >&2 && exit 1
+}
 
 : "${HELM_TILLER_SILENT:=false}"
 : "${HELM_TILLER_PORT:=44134}"
+if [ $HELM_TILLER_PORT -eq "0" ]; then
+  HELM_TILLER_PORT="$(find_unused_port)"
+fi
 : "${HELM_TILLER_STORAGE:=secret}"
 : "${HELM_TILLER_LOGS:=false}"
 : "${HELM_TILLER_LOGS_DIR:=/dev/null}"
@@ -36,7 +70,7 @@ function usage() {
 
   Available environment variables:
     'HELM_TILLER_SILENT=true' - silence plugin specific messages, only `helm` cli output will be printed.
-    'HELM_TILLER_PORT=44140' - change Tiller port, default is `44134`.
+    'HELM_TILLER_PORT=44134' - change Tiller port, default is `44134`. '0' means find an unused port
     'HELM_TILLER_STORAGE=configmap' - change Tiller storage to `configmap`, default is `secret`.
     'HELM_TILLER_LOGS=true' - store Tiller logs in '$HOME/.helm/plugins/helm-tiller/logs'.
     'HELM_TILLER_LOGS_DIR=/some_folder/tiller.logs' - set a specific folder/file for Tiller logs.
@@ -120,6 +154,7 @@ start_tiller() {
   { ./bin/tiller --storage=${HELM_TILLER_STORAGE} --listen=127.0.0.1:${HELM_TILLER_PORT} --history-max=${HELM_TILLER_HISTORY_MAX} & } 2>"${HELM_TILLER_LOGS_DIR}"
   if [[ "${HELM_TILLER_SILENT}" == "false" ]]; then
     echo "Tiller namespace: $TILLER_NAMESPACE"
+    echo "Tiller port: $HELM_TILLER_PORT"
   fi
 }
 
