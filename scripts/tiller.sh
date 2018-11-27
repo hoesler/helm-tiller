@@ -188,6 +188,7 @@ start)
   check_install_tiller
   eval '$(helm_env "$@")'
   start_tiller
+  trap stop_tiller EXIT
   cd "${CURRENT_FOLDER}"
   # open user's preferred shell
   # shellcheck disable=SC2236
